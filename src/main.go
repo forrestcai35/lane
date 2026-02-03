@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/forrest/lane/cmd"
+	"github.com/forrestcai35/lane/cmd"
 )
 
 func main() {

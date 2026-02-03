@@ -2,12 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/forrest/lane/internal/clipboard"
-	"github.com/forrest/lane/internal/stripe"
-	"github.com/forrest/lane/internal/ui"
+	"github.com/forrestcai35/lane/internal/api"
+	"github.com/forrestcai35/lane/internal/clipboard"
+	"github.com/forrestcai35/lane/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -17,8 +16,10 @@ var (
 
 	// Flags
 	clientName  string
+	clientEmail string
 	description string
 	currency    string
+	sendEmail   bool
 	noCopy      bool
 )
 
@@ -28,16 +29,13 @@ var rootCmd = &cobra.Command{
 	Short: "Generate Stripe invoices instantly",
 	Long: ui.Logo.Render("Lane") + `
 The fastest way to generate a Stripe invoice from the terminal.
-Linear for Invoicing.
 
-` + ui.Label.Render("Usage:") + `
-  lane 500 --client "Apple" --desc "Web Design"
-
-` + ui.Label.Render("Environment:") + `
-  STRIPE_KEY    Your Stripe secret key (required)`,
+` + ui.Label.Render("Quick Start:") + `
+  lane login                              # Authenticate with Lane
+  lane 500 --client "Apple" --desc "Work" # Create invoice`,
 	Example: `  lane 100 --client "Acme Corp" --desc "Consulting"
-  lane 2500 --client "Startup Inc" --desc "Logo Design" --currency eur
-  lane 50.99 --desc "Quick fix"`,
+  lane 500 --client "Apple" --desc "Web Design" --email "tim@apple.com" --send
+  lane 2500 --desc "Logo Design" --currency eur`,
 	Args: cobra.ExactArgs(1),
 	RunE: runInvoice,
 }
@@ -49,13 +47,14 @@ func Execute() error {
 
 func init() {
 	rootCmd.Flags().StringVarP(&clientName, "client", "c", "", "Client name")
+	rootCmd.Flags().StringVarP(&clientEmail, "email", "e", "", "Client email address")
 	rootCmd.Flags().StringVarP(&description, "desc", "d", "", "Invoice description (required)")
 	rootCmd.Flags().StringVar(&currency, "currency", "usd", "Currency code (usd, eur, gbp, etc.)")
+	rootCmd.Flags().BoolVar(&sendEmail, "send", false, "Send invoice via email (requires --email)")
 	rootCmd.Flags().BoolVar(&noCopy, "no-copy", false, "Don't copy link to clipboard")
 
 	rootCmd.MarkFlagRequired("desc")
 
-	// Disable default completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 }
 
@@ -67,25 +66,34 @@ func runInvoice(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Validate email flags
+	if sendEmail && clientEmail == "" {
+		err := fmt.Errorf("--send requires --email flag")
+		fmt.Println(ui.FormatError(err.Error()))
+		return err
+	}
+
 	// Print header
 	fmt.Println()
 	fmt.Println(ui.Logo.Render("⚡ Lane"))
 
-	// Initialize Stripe client
-	fmt.Println(ui.FormatStep("Connecting to Stripe..."))
-	client, err := stripe.NewClient()
+	// Initialize API client
+	fmt.Println(ui.FormatStep("Connecting..."))
+	client, err := api.NewClient()
 	if err != nil {
 		fmt.Println(ui.FormatError(err.Error()))
 		return err
 	}
 
-	// Create the invoice
+	// Create the invoice via API
 	fmt.Println(ui.FormatStep("Creating invoice..."))
-	result, err := client.CreateInvoice(stripe.InvoiceRequest{
-		AmountCents: amountCents,
-		ClientName:  clientName,
-		Description: description,
+	result, err := client.CreateInvoice(api.InvoiceRequest{
+		Amount:      amountCents,
 		Currency:    strings.ToLower(currency),
+		ClientName:  clientName,
+		ClientEmail: clientEmail,
+		Description: description,
+		SendEmail:   sendEmail,
 	})
 	if err != nil {
 		fmt.Println(ui.FormatError(err.Error()))
@@ -105,7 +113,7 @@ func runInvoice(cmd *cobra.Command, args []string) error {
 	// Build output
 	var output strings.Builder
 
-	output.WriteString(ui.FormatSuccess("Invoice created successfully!"))
+	output.WriteString(ui.FormatSuccess("Invoice created!"))
 	output.WriteString("\n\n")
 
 	// Details
@@ -113,10 +121,22 @@ func runInvoice(cmd *cobra.Command, args []string) error {
 		output.WriteString(ui.FormatLabel("Client", clientName))
 		output.WriteString("\n")
 	}
+	if clientEmail != "" {
+		output.WriteString(ui.FormatLabel("Email", clientEmail))
+		output.WriteString("\n")
+	}
 	output.WriteString(ui.FormatLabel("Description", description))
 	output.WriteString("\n")
 	output.WriteString(ui.FormatLabel("Amount", ui.FormatAmount(amountCents)))
+	output.WriteString("\n")
+	output.WriteString(ui.FormatLabel("Invoice", result.ID))
 	output.WriteString("\n\n")
+
+	// Status messages
+	if result.EmailSent {
+		output.WriteString(ui.FormatSuccess("✓ Email sent to " + clientEmail))
+		output.WriteString("\n\n")
+	}
 
 	// Payment link
 	output.WriteString(ui.Label.Render("Payment Link: "))
@@ -124,7 +144,6 @@ func runInvoice(cmd *cobra.Command, args []string) error {
 	output.WriteString("\n")
 	output.WriteString(ui.FormatLink(result.PaymentLink))
 
-	// Print the result box
 	fmt.Println(ui.ResultBox.Render(output.String()))
 	fmt.Println()
 
@@ -132,7 +151,6 @@ func runInvoice(cmd *cobra.Command, args []string) error {
 }
 
 // parseAmount converts a string amount to cents
-// Accepts: "500" (dollars), "500.00" (dollars), "50.5" (dollars)
 func parseAmount(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "$")
@@ -147,8 +165,6 @@ func parseAmount(s string) (int64, error) {
 		return 0, fmt.Errorf("amount must be greater than zero")
 	}
 
-	// Convert to cents
 	cents := int64(dollars * 100)
-
 	return cents, nil
 }

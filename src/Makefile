@@ -2,7 +2,7 @@
 
 BINARY_NAME=lane
 VERSION=0.1.0
-LDFLAGS=-ldflags "-X github.com/forrest/lane/cmd.Version=$(VERSION)"
+LDFLAGS=-ldflags "-X github.com/forrestcai35/lane/cmd.Version=$(VERSION)"
 
 # Build the binary
 build:
