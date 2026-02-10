@@ -1,0 +1,58 @@
+project_name: lane
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - dir: src
+    main: .
+    binary: lane
+    ldflags:
+      - -s -w -X github.com/forrestcai35/lane/cmd.Version={{.Version}}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+brews:
+  - repository:
+      owner: forrestcai35
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/forrestcai35/lane"
+    description: "Generate Stripe invoices from the terminal"
+    license: "MIT"
+    install: |
+      bin.install "lane"
+    test: |
+      assert_match "lane", shell_output("#{bin}/lane --help")
+
+release:
+  github:
+    owner: forrestcai35
+    name: lane
