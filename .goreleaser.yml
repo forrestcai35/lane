@@ -2,11 +2,6 @@ version: 2
 
 project_name: lane
 
-before:
-  hooks:
-    - cmd: go mod tidy
-      dir: src
-
 builds:
   - dir: src
     main: .
