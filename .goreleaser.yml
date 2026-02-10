@@ -1,8 +1,11 @@
+version: 2
+
 project_name: lane
 
 before:
   hooks:
-    - go mod tidy
+    - cmd: go mod tidy
+      dir: src
 
 builds:
   - dir: src
@@ -22,11 +25,11 @@ builds:
         goarch: arm64
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"
